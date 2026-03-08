@@ -33,7 +33,7 @@ docker/mysql/
 docker/redis/
 
 # Plans/reports (local only)
-plans/
+
 
 # Test artifacts
 backend/storage/framework/cache/
