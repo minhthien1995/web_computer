@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Environment files (never commit!)
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+
+# Build outputs
+frontend/dist/
+backend/public/hot
+backend/storage/app/public/*
+
+# Laravel
+backend/storage/logs/*.log
+backend/bootstrap/cache/*.php
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes
+docker/mysql/
+docker/redis/
+
+# Plans/reports (local only)
+plans/
+
+# Test artifacts
+backend/storage/framework/cache/
+backend/storage/framework/sessions/
+backend/storage/framework/views/
