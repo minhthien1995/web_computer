@@ -168,20 +168,30 @@ Hiện là stubs. Để implement thật cần:
 
 ## Todo Checklist
 
-### Phase 01 — Critical (nên làm ngay)
-- [ ] BUG-01: Fix OrderController validator (name/address/bank_transfer)
-- [ ] BUG-02: Fix BookRepairPage field names (repair_service_id, customer_notes)
-- [ ] BUG-03: Fix MyRepairsPage endpoint URL + field names
-- [ ] BUG-04: Fix AdminOrdersPage URL pattern (id not order_number, no /status)
-- [ ] BUG-05: Fix AdminRepairOrdersPage field names + status endpoint
-- [ ] BUG-06: Fix pagination meta extraction (4 pages)
+### Phase 01 — Critical ✅ DONE
+- [x] BUG-01: Fix OrderController validator (name/address/bank_transfer)
+- [x] BUG-02: Fix BookRepairPage field names (repair_service_id, customer_notes)
+- [x] BUG-03: Fix MyRepairsPage endpoint URL + field names
+- [x] BUG-04: Fix AdminOrdersPage URL pattern (id not order_number, no /status)
+- [x] BUG-05: Fix AdminRepairOrdersPage field names + status endpoint
+- [x] BUG-06: Fix pagination meta extraction (4 pages)
 
-### Phase 02
-- [ ] Thêm image URL field vào AdminProductsPage modal
-- [ ] Thêm client-side validation cho category_id
+### Phase 02 ✅ DONE
+- [x] Thêm image URL field vào AdminProductsPage modal
+- [x] Thêm client-side validation cho category_id
+- [x] Fix stock_quantity → stock_qty field mismatch
+- [x] Thêm image thumbnail vào product table
+- [x] Hiển thị existing images khi edit + delete capability
 
-### Phase 03
-- [ ] Quyết định URL-only hay file upload → implement
+### Phase 03 ✅ DONE
+- [x] Storage symlink: `php artisan storage:link`
+- [x] Backend: `uploadImage` accepts both file (multipart) and URL string
+- [x] Backend: `deleteImage` cleans up local files from storage disk
+- [x] Frontend: Drag-and-drop + file input (`<input type="file" multiple>`)
+- [x] Frontend: File preview thumbnails before upload
+- [x] Frontend: FormData upload with `Content-Type: multipart/form-data`
+- [x] Vite proxy: `/storage` → backend for serving uploaded images
+- [x] Modularized: `use-product-images.js` composable + `product-image-manager.vue` component
 
 ### Phase 04
 - [ ] Config mail + tạo Mailables + wire to controllers

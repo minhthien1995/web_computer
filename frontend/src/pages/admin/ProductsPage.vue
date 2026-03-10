@@ -3,12 +3,17 @@ import { ref, onMounted } from 'vue'
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
 import api from '@/services/api'
 import { useUiStore } from '@/stores/ui'
+import { useProductImages } from '@/composables/use-product-images'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import Pagination from '@/components/common/Pagination.vue'
-import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline'
+import ProductImageManager from '@/components/admin/product-image-manager.vue'
+import ProductSpecManager from '@/components/admin/product-spec-manager.vue'
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, PhotoIcon } from '@heroicons/vue/24/outline'
 
 const ui = useUiStore()
+const images = useProductImages()
+
 const products = ref([])
 const categories = ref([])
 const brands = ref([])
@@ -23,17 +28,20 @@ const deleteConfirm = ref({ show: false, id: null, name: '' })
 
 const form = ref({
   name: '', slug: '', category_id: '', brand_id: '',
-  base_price: '', sale_price: '', stock_quantity: '',
+  base_price: '', sale_price: '', stock_qty: '',
   status: 'active', is_featured: false, description: '',
+  specs: [],
 })
 
 function resetForm() {
   form.value = {
     name: '', slug: '', category_id: '', brand_id: '',
-    base_price: '', sale_price: '', stock_quantity: '',
+    base_price: '', sale_price: '', stock_qty: '',
     status: 'active', is_featured: false, description: '',
+    specs: [],
   }
   editingId.value = null
+  images.reset()
 }
 
 function generateSlug(name) {
@@ -62,21 +70,36 @@ function openCreate() {
   showModal.value = true
 }
 
-function openEdit(product) {
+async function openEdit(product) {
   editingId.value = product.id
-  form.value = {
-    name: product.name,
-    slug: product.slug,
-    category_id: product.category_id || product.category?.id || '',
-    brand_id: product.brand_id || product.brand?.id || '',
-    base_price: product.base_price,
-    sale_price: product.sale_price || '',
-    stock_quantity: product.stock_quantity || '',
-    status: product.status || 'active',
-    is_featured: product.is_featured || false,
-    description: product.description || '',
-  }
   showModal.value = true
+  // Fetch full product with specs (index doesn't include specs)
+  try {
+    const { data } = await api.get(`/admin/products/${product.id}`)
+    const p = data.data || product
+    form.value = {
+      name: p.name, slug: p.slug,
+      category_id: p.category_id || p.category?.id || '',
+      brand_id: p.brand_id || p.brand?.id || '',
+      base_price: p.base_price, sale_price: p.sale_price || '',
+      stock_qty: p.stock_qty ?? '', status: p.status || 'active',
+      is_featured: p.is_featured || false, description: p.description || '',
+      specs: (p.specs || []).map(s => ({
+        spec_group: s.spec_group, spec_key: s.spec_key, spec_value: s.spec_value,
+      })),
+    }
+    images.loadExisting(p.images)
+  } catch {
+    form.value = {
+      name: product.name, slug: product.slug,
+      category_id: product.category_id || '', brand_id: product.brand_id || '',
+      base_price: product.base_price, sale_price: product.sale_price || '',
+      stock_qty: product.stock_qty ?? '', status: product.status || 'active',
+      is_featured: product.is_featured || false, description: product.description || '',
+      specs: [],
+    }
+    images.loadExisting(product.images)
+  }
 }
 
 function formatPrice(price) {
@@ -125,14 +148,23 @@ async function saveProduct() {
     ui.error('Vui lòng điền tên và giá sản phẩm')
     return
   }
+  if (!form.value.category_id) {
+    ui.error('Vui lòng chọn danh mục sản phẩm')
+    return
+  }
   saving.value = true
   try {
+    let productId = editingId.value
     if (editingId.value) {
       await api.put(`/admin/products/${editingId.value}`, form.value)
       ui.success('Cập nhật sản phẩm thành công!')
     } else {
-      await api.post('/admin/products', form.value)
+      const { data } = await api.post('/admin/products', form.value)
+      productId = data.data?.id
       ui.success('Tạo sản phẩm thành công!')
+    }
+    if (productId && images.hasPending()) {
+      await images.uploadAll(productId)
     }
     showModal.value = false
     fetchProducts()
@@ -232,9 +264,17 @@ onMounted(() => {
           <tbody class="divide-y divide-gray-50">
             <tr v-for="product in products" :key="product.id" class="hover:bg-gray-50">
               <td class="px-4 py-3">
-                <div>
-                  <p class="font-medium text-gray-800 line-clamp-1">{{ product.name }}</p>
-                  <p class="text-xs text-gray-400">{{ product.brand?.name }}</p>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                    <img v-if="product.images?.[0]?.url" :src="product.images[0].url" :alt="product.name" class="w-full h-full object-cover" />
+                    <div v-else class="w-full h-full flex items-center justify-center">
+                      <PhotoIcon class="w-5 h-5 text-gray-300" />
+                    </div>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="font-medium text-gray-800 line-clamp-1">{{ product.name }}</p>
+                    <p class="text-xs text-gray-400">{{ product.brand?.name }}</p>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3 text-gray-600">{{ product.category?.name || '—' }}</td>
@@ -242,7 +282,7 @@ onMounted(() => {
                 <p class="font-medium text-gray-800">{{ formatPrice(product.sale_price || product.base_price) }}</p>
                 <p v-if="product.sale_price" class="text-xs text-gray-400 line-through">{{ formatPrice(product.base_price) }}</p>
               </td>
-              <td class="px-4 py-3 text-gray-600">{{ product.stock_quantity ?? '—' }}</td>
+              <td class="px-4 py-3 text-gray-600">{{ product.stock_qty ?? '—' }}</td>
               <td class="px-4 py-3">
                 <span
                   class="text-xs px-2 py-1 rounded-full font-medium"
@@ -295,7 +335,7 @@ onMounted(() => {
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Danh mục <span class="text-red-500">*</span></label>
                   <select v-model="form.category_id"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Chọn danh mục</option>
@@ -326,7 +366,7 @@ onMounted(() => {
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Tồn kho</label>
-                  <input v-model.number="form.stock_quantity" type="number" min="0"
+                  <input v-model.number="form.stock_qty" type="number" min="0"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
@@ -344,6 +384,34 @@ onMounted(() => {
                   <span class="text-sm font-medium text-gray-700">Sản phẩm nổi bật</span>
                 </label>
               </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả sản phẩm</label>
+                <textarea v-model="form.description" rows="3" placeholder="Nhập mô tả sản phẩm..."
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
+              </div>
+
+              <!-- Specs management -->
+              <ProductSpecManager v-model:specs="form.specs" />
+
+              <!-- Image management (extracted component) -->
+              <ProductImageManager
+                :existing-images="images.existingImages.value"
+                :pending-files="images.pendingFiles.value"
+                :pending-image-urls="images.pendingImageUrls.value"
+                :new-image-url="images.newImageUrl.value"
+                :is-dragging="images.isDragging.value"
+                :deleting-image-id="images.deletingImageId.value"
+                :editing-id="editingId"
+                @update:new-image-url="images.newImageUrl.value = $event"
+                @add-url="images.addImageUrl"
+                @remove-pending-url="images.removePendingUrl"
+                @remove-pending-file="images.removePendingFile"
+                @delete-existing-image="images.deleteExistingImage"
+                @files-selected="images.addFiles"
+                @dragover="images.onDragOver"
+                @dragleave="images.onDragLeave"
+                @drop="images.onDrop"
+              />
 
               <div class="flex justify-end gap-3 pt-2">
                 <button type="button" @click="showModal = false"

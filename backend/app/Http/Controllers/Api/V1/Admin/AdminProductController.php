@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class AdminProductController extends Controller
 {
@@ -110,13 +111,28 @@ class AdminProductController extends Controller
             'status'          => 'in:active,inactive,out_of_stock',
             'warranty_months' => 'integer|min:0',
             'weight_grams'    => 'nullable|integer|min:0',
+            'specs'              => 'nullable|array',
+            'specs.*.spec_group' => 'required_with:specs|string',
+            'specs.*.spec_key'   => 'required_with:specs|string',
+            'specs.*.spec_value' => 'required_with:specs|string',
         ]);
+
+        $specs = $validated['specs'] ?? null;
+        unset($validated['specs']);
 
         $product->update($validated);
 
+        // Sync specs: delete old, insert new
+        if ($specs !== null) {
+            $product->specs()->delete();
+            foreach ($specs as $index => $spec) {
+                $product->specs()->create(array_merge($spec, ['sort_order' => $index]));
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'data'    => $product->fresh(['category', 'brand']),
+            'data'    => $product->fresh(['category', 'brand', 'specs']),
             'message' => 'Product updated',
         ]);
     }
@@ -137,16 +153,28 @@ class AdminProductController extends Controller
     {
         $product = Product::findOrFail($id);
 
+        // Accept either file upload or URL string
+        $hasFile = $request->hasFile('image');
+
         $request->validate([
-            'url'      => 'required|string|max:500',
+            'url'      => $hasFile ? 'nullable' : 'required|string|max:500',
+            'image'    => $hasFile ? 'required|image|mimes:jpg,jpeg,png,gif,webp|max:5120' : 'nullable',
             'alt_text' => 'nullable|string|max:255',
         ]);
+
+        if ($hasFile) {
+            $file = $request->file('image');
+            $path = $file->store("products/{$product->id}", 'public');
+            $url  = Storage::disk('public')->url($path);
+        } else {
+            $url = $request->url;
+        }
 
         $isPrimary = $product->images()->count() === 0;
         $sortOrder = $product->images()->max('sort_order') + 1;
 
         $image = $product->images()->create([
-            'url'        => $request->url,
+            'url'        => $url,
             'alt_text'   => $request->alt_text ?? $product->name,
             'sort_order' => $sortOrder,
             'is_primary' => $isPrimary,
@@ -170,6 +198,13 @@ class AdminProductController extends Controller
                 'data'    => null,
                 'message' => 'Image does not belong to this product',
             ], 403);
+        }
+
+        // Delete local file if stored in public disk
+        $storagePrefix = '/storage/';
+        if (str_contains($image->url, $storagePrefix)) {
+            $relativePath = substr($image->url, strpos($image->url, $storagePrefix) + strlen($storagePrefix));
+            Storage::disk('public')->delete($relativePath);
         }
 
         $wasPrimary = $image->is_primary;

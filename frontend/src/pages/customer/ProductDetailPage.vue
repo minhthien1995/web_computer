@@ -13,6 +13,7 @@ import {
   MinusIcon,
   PlusIcon,
   TagIcon,
+  ChevronDownIcon,
 } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
@@ -26,6 +27,25 @@ const loading = ref(true)
 const quantity = ref(1)
 const selectedVariant = ref(null)
 const addingToCart = ref(false)
+const showAllSpecs = ref(false)
+
+// Group specs by spec_group, preserving order
+const groupedSpecs = computed(() => {
+  const specs = product.value?.specs || []
+  if (!specs.length) return []
+  const groups = []
+  const groupMap = new Map()
+  for (const spec of specs) {
+    const group = spec.spec_group || 'Thông tin chung'
+    if (!groupMap.has(group)) {
+      const entry = { group, items: [] }
+      groupMap.set(group, entry)
+      groups.push(entry)
+    }
+    groupMap.get(group).items.push(spec)
+  }
+  return groups
+})
 
 function formatPrice(price) {
   return price?.toLocaleString('vi-VN') + '₫'
@@ -206,42 +226,68 @@ onMounted(fetchProduct)
           </div>
 
           <!-- Stock info -->
-          <div v-if="product.stock_quantity !== undefined" class="flex items-center gap-2 text-sm text-gray-500">
+          <div v-if="product.stock_qty != null" class="flex items-center gap-2 text-sm text-gray-500">
             <TagIcon class="w-4 h-4" />
-            <span>Còn lại: {{ product.stock_quantity }} sản phẩm</span>
+            <span>Còn lại: {{ product.stock_qty }} sản phẩm</span>
           </div>
         </div>
       </div>
 
-      <!-- Description & Specs -->
+      <!-- Specs & Description (thegioididong-style) -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Description -->
-        <div class="lg:col-span-2">
+        <!-- Specs (left, prominent like TGDD) -->
+        <div v-if="groupedSpecs.length > 0" class="lg:col-span-2 order-1">
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <h2 class="text-lg font-bold text-gray-800 px-6 pt-6 pb-3">Thông số kỹ thuật</h2>
+            <div :class="{ 'max-h-[400px] overflow-hidden relative': !showAllSpecs && groupedSpecs.length > 2 }">
+              <table class="w-full text-sm">
+                <tbody>
+                  <template v-for="(group, gIdx) in groupedSpecs" :key="gIdx">
+                    <!-- Group header -->
+                    <tr class="bg-gray-50">
+                      <td colspan="2" class="px-6 py-2.5 font-semibold text-gray-700 text-sm">
+                        {{ group.group }}
+                      </td>
+                    </tr>
+                    <!-- Spec rows with alternating background -->
+                    <tr
+                      v-for="(spec, sIdx) in group.items"
+                      :key="`${gIdx}-${sIdx}`"
+                      :class="sIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'"
+                    >
+                      <td class="px-6 py-2.5 text-gray-500 w-2/5 align-top">{{ spec.spec_key }}</td>
+                      <td class="px-6 py-2.5 text-gray-800">{{ spec.spec_value }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <!-- Gradient fade when collapsed -->
+              <div
+                v-if="!showAllSpecs && groupedSpecs.length > 2"
+                class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent"
+              />
+            </div>
+            <!-- Toggle button -->
+            <div v-if="groupedSpecs.length > 2" class="px-6 py-3 text-center border-t border-gray-100">
+              <button
+                @click="showAllSpecs = !showAllSpecs"
+                class="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                {{ showAllSpecs ? 'Thu gọn' : 'Xem thêm thông số' }}
+                <ChevronDownIcon class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showAllSpecs }" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Description (right sidebar or full width) -->
+        <div :class="groupedSpecs.length > 0 ? 'lg:col-span-1 order-2' : 'lg:col-span-3 order-1'">
           <div class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
             <h2 class="text-lg font-bold text-gray-800 mb-4">Mô tả sản phẩm</h2>
             <div
               class="prose prose-sm max-w-none text-gray-600 leading-relaxed"
-              v-html="product.description || 'Chưa có mô tả'"
+              v-html="product.description || 'Chưa có mô tả sản phẩm.'"
             />
-          </div>
-        </div>
-
-        <!-- Specs -->
-        <div v-if="product.specifications && Object.keys(product.specifications).length > 0">
-          <div class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <h2 class="text-lg font-bold text-gray-800 mb-4">Thông số kỹ thuật</h2>
-            <table class="w-full text-sm">
-              <tbody>
-                <tr
-                  v-for="(value, key) in product.specifications"
-                  :key="key"
-                  class="border-b border-gray-50 last:border-0"
-                >
-                  <td class="py-2 pr-3 text-gray-500 font-medium w-2/5">{{ key }}</td>
-                  <td class="py-2 text-gray-800">{{ value }}</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
